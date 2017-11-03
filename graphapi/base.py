@@ -1,5 +1,5 @@
 import requests,time,urllib,json
-from nodes import BasicPage,Page
+from nodes import BasicPage,Page,Post
 
 API_URL = 'https://graph.facebook.com/v'
 
@@ -12,6 +12,18 @@ PAGE_FIELDS =[ 'id','about','fan_count','bio','category','company_overview','con
         'location','new_like_count','name','phone','rating_count','talking_about_count','website',
         "were_here_count"]
 
+POST_FIELDS = ['id','from','created_time','message','icon','link','permalink_url','place','type','to',
+               'updated_time','full_picture','picture',
+                'reactions.type(LIKE).limit(20).summary(total_count).as(like)',
+                'reactions.type(LOVE).limit(20).summary(total_count).as(love)',
+                'reactions.type(WOW).limit(20).summary(total_count).as(wow)',
+                'reactions.type(HAHA).limit(20).summary(total_count).as(haha)',
+                'reactions.type(SAD).limit(20).summary(total_count).as(sad)',
+                'reactions.type(ANGRY).limit(20).summary(total_count).as(angry)',
+                'comments.limit(20).summary(total_count)',
+                'shares'
+               ]
+
 class Graph(object):
 
 
@@ -22,7 +34,6 @@ class Graph(object):
 
         if self.version not in VERSION:
             raise ValueError("Version Not Found")
-
 
     def _request_until_succeed(self,url):
         response = requests.get(url)
@@ -52,7 +63,9 @@ class Graph(object):
         limit = 25
         fields = 'id,name,fan_count'
         if kwargs.has_key('limit'):
-            limit = kwargs['limit']
+            if limit < kwargs['limit']:
+                limit = kwargs['limit']
+
             if limit > MAX_PAGE_SIZE:
                 raise ValueError('Max Allowed Size is 1000')
         if kwargs.has_key('fields'):
@@ -66,13 +79,13 @@ class Graph(object):
 
         if response.has_key('data'):
             return [BasicPage(page['id'],page['fan_count'],page['name']) for page in \
-                    sorted(response['data'],key=lambda x:x['fan_count'],reverse=True)]
+                    sorted(response['data'],key=lambda x:x['fan_count'],reverse=True)][:limit]
         else:
             return  []
 
-    def getPage(self,id):
+    def getPage(self,pageid):
         url = self._get_api_url()
-        url = self._prepare_url(url+'/'+id+'?fields={}'.format(','.join(PAGE_FIELDS)))
+        url = self._prepare_url(url+'/'+pageid+'?fields={}'.format(','.join(PAGE_FIELDS)))
         response = self._request_until_succeed(url)
         if response:
             return Page(data=response)
@@ -80,7 +93,21 @@ class Graph(object):
             return None
 
     def getPosts(self,pageid,**kwargs):
-        pass
+        limit = 5
+        if kwargs.has_key('limit'):
+            limit = kwargs['limit']
+        page = self.getPage(pageid=pageid)
+        url = self._get_api_url()+'/{}'.format(pageid)
+        url = self._prepare_url(url+'?fields=posts{}&limit={}'.format('{'+','.join(POST_FIELDS+'}'),limit))
+        response = self._request_until_succeed(url)
+        def addPage(post):
+            post['page'] = page
+            return post
+        if response:
+            if response.has_key('posts'):
+                return [Post(data=addPage(post)) for post in response.get('posts').get('data')]
+        else:
+            return []
 
     def getPost(self,postid,**kwargs):
         pass
